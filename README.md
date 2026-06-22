@@ -44,6 +44,23 @@ q.stop()  # 优雅关闭；也可用 with MQueue(...) as q: ...
 
 处理器可以是普通可调用对象，也可以是实现 `execute(payload) -> JobResult` 的对象。
 
+## 性能基准（内存驱动横向对比）
+
+同一台机器、统一方法下三语言版本的吞吐对比（内存驱动，排除 Redis/磁盘干扰）。
+
+**测试环境**：Intel Xeon Platinum 8375C @ 2.90GHz（2 vCPU）/ 7.8 GiB RAM / Ubuntu 22.04 / Go 1.22、Rust 1.83（release）、CPython 3.12。
+**方法**：每项 N = 200,000 消息，取 3 次运行的中位数；批量大小 1000；端到端为 4 workers + 空 handler（pre-enqueue 后计时至全部处理完）。
+
+| 指标 | Go | Rust | Python |
+|------|---:|-----:|-------:|
+| 单条入队 `enqueue`（条/秒）        | 663,013   | 1,293,833 | 97,660 |
+| 批量入队 `enqueue_batch`（条/秒，batch=1000） | 727,392 | 1,109,984 | 98,832 |
+| 端到端处理（条/秒，4 workers）     | 404,835   | 1,075,262 | 45,624 |
+
+> 说明：Go/Rust 为编译型、Python 为解释型且受 GIL 限制，量级差异属预期。数字为单台 2 vCPU 云主机上的近似值，仅用于版本间相对比较，绝对值会随硬件波动。
+>
+> 复现：Go `go run ./bench`、Rust `cargo run --release --example bench`、Python `python bench.py`。
+
 ## 消息优先级
 
 `Payload.priority`（int）按符号映射三档，默认 `0`：
