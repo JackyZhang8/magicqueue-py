@@ -1,14 +1,49 @@
-"""基于 sqlite3 的持久化存储，用于崩溃恢复。"""
+"""持久化存储抽象与基于 sqlite3 的默认实现，用于崩溃恢复。"""
 
 from __future__ import annotations
 
 import os
 import sqlite3
 import threading
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
 
 
-class SqliteStore:
+class Store(ABC):
+    """持久层抽象：id -> 消息 JSON 字节的键值存储。
+
+    实现需保证线程安全（多个 worker/消费者线程会并发访问）。
+    内置 :class:`SqliteStore`（零额外依赖）与
+    :class:`~magicqueue.leveldb_store.LevelDBStore`（与 Go/Rust 版的
+    LevelDB/sled 对齐，需 ``pip install magicqueue[leveldb]``）。
+    """
+
+    @abstractmethod
+    def put(self, msg_id: str, data: bytes) -> None:
+        """写入或覆盖一条消息。"""
+
+    @abstractmethod
+    def put_batch(self, items: Iterable[tuple[str, bytes]]) -> None:
+        """在一次原子操作中批量写入。"""
+
+    @abstractmethod
+    def delete(self, msg_id: str) -> None:
+        """删除一条消息（已确认）。"""
+
+    @abstractmethod
+    def delete_batch(self, ids: Iterable[str]) -> None:
+        """批量删除消息。"""
+
+    @abstractmethod
+    def all(self) -> list[tuple[str, bytes]]:
+        """返回全部 (id, data)，用于启动时崩溃恢复。"""
+
+    @abstractmethod
+    def close(self) -> None:
+        """释放底层资源。"""
+
+
+class SqliteStore(Store):
     """简单的键值持久层：id -> 消息 JSON 字节。线程安全（内部加锁）。"""
 
     def __init__(self, path: str) -> None:

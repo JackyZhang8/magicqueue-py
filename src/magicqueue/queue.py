@@ -15,7 +15,7 @@ from .errors import AlreadyStartedError, DriverNotSetError, EmptyTopicError
 from .logger import DefaultLogger, Logger
 from .memory import MemoryDriver
 from .payload import HandlerLike, JobResult, Payload, call_handler
-from .persistence import SqliteStore
+from .persistence import SqliteStore, Store
 
 RecoveryListener = Callable[[str], None]
 
@@ -76,7 +76,7 @@ class MQueue:
     def __init__(self, name: str) -> None:
         self.name = name
         self._driver: Driver | None = None
-        self._store: SqliteStore | None = None
+        self._store: Store | None = None
         self._logger: Logger = DefaultLogger()
         self._opts = Options()
         self._handlers: dict[str, HandlerLike] = {}
@@ -137,11 +137,29 @@ class MQueue:
         return self
 
     def use_persistence(self, path: str) -> MQueue:
-        """启用 sqlite 持久化，用于崩溃恢复。"""
+        """启用 sqlite 持久化（零额外依赖的默认方案），用于崩溃恢复。"""
         try:
             self._store = SqliteStore(path)
         except Exception as e:  # noqa: BLE001
             self._set_err(e)
+        return self
+
+    def use_leveldb(self, path: str) -> MQueue:
+        """启用 LevelDB 持久化（与 Go/Rust 版对齐），用于崩溃恢复。
+
+        需额外安装 ``plyvel``：``pip install "magicqueue[leveldb]"``。
+        """
+        from .leveldb_store import LevelDBStore
+
+        try:
+            self._store = LevelDBStore(path)
+        except Exception as e:  # noqa: BLE001
+            self._set_err(e)
+        return self
+
+    def use_store(self, store: Store) -> MQueue:
+        """直接使用自定义持久层实现。"""
+        self._store = store
         return self
 
     def _set_err(self, err: Exception) -> None:
@@ -431,16 +449,28 @@ class MQueue:
             f"job {job.id} failed, retry {job.retry}/{job.max_retry} in {delay:.3f}s"
         )
 
+        holder: dict[str, threading.Timer] = {}
+
         def _fire() -> None:
-            if self._stop.is_set():
-                return
             try:
+                if self._stop.is_set():
+                    return
                 self._requeue(job)
             except Exception as e:  # noqa: BLE001
                 self._logger.log(f"failed to requeue job {job.id}: {e}")
+            finally:
+                # 触发后从在途集合移除自身，避免 _timers 无限增长。
+                fired = holder.get("timer")
+                if fired is not None:
+                    with self._timers_lock:
+                        try:
+                            self._timers.remove(fired)
+                        except ValueError:
+                            pass
 
         timer = threading.Timer(delay, _fire)
         timer.daemon = True
+        holder["timer"] = timer
         with self._timers_lock:
             if self._started:
                 self._timers.append(timer)

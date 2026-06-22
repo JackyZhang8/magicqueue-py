@@ -29,7 +29,7 @@ from .errors import (
 from .logger import DefaultLogger, Logger
 from .memory import MemoryDriver
 from .payload import Handler, HandlerLike, JobResult, Payload
-from .persistence import SqliteStore
+from .persistence import SqliteStore, Store
 from .queue import MQueue, Options, RecoveryListener
 from .redis_driver import RedisDriver
 
@@ -45,6 +45,7 @@ __all__ = [
     "QueueItem",
     "MemoryDriver",
     "RedisDriver",
+    "Store",
     "SqliteStore",
     "Logger",
     "DefaultLogger",

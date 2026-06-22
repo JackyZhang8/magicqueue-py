@@ -166,11 +166,25 @@ def test_start_twice_fails():
         q.stop()
 
 
-def test_persistence_recovery(tmp_path):
-    db = str(tmp_path / "mq.db")
+def _has_plyvel() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("plyvel") is not None
+
+
+_BACKENDS = [
+    ("sqlite", lambda q, path: q.use_persistence(path), "mq.db"),
+]
+if _has_plyvel():
+    _BACKENDS.append(("leveldb", lambda q, path: q.use_leveldb(path), "mq.leveldb"))
+
+
+@pytest.mark.parametrize("backend,configure,filename", _BACKENDS, ids=[b[0] for b in _BACKENDS])
+def test_persistence_recovery(tmp_path, backend, configure, filename):
+    db = str(tmp_path / filename)
 
     # 阶段 1：持久化入队但不启动 worker（模拟崩溃）。
-    q1 = MQueue("persist").use_memory().use_persistence(db)
+    q1 = configure(MQueue("persist").use_memory(), db)
     assert q1.err is None
     for _ in range(3):
         q1.enqueue(Payload("job", is_persist=True))
@@ -185,7 +199,7 @@ def test_persistence_recovery(tmp_path):
             count["n"] += 1
         return JobResult.ok()
 
-    q2 = MQueue("persist").use_memory().use_persistence(db)
+    q2 = configure(MQueue("persist").use_memory(), db)
     q2.set_handler("job", "", handler)
     q2.start_workers(2)
     try:

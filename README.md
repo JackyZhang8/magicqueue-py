@@ -1,6 +1,6 @@
 # MagicQueue (Python)
 
-[![CI](https://github.com/JackyZhang8/MagicQueue/actions/workflows/ci.yml/badge.svg)](https://github.com/JackyZhang8/MagicQueue/actions)
+[![CI](https://github.com/JackyZhang8/magicqueue-py/actions/workflows/ci.yml/badge.svg)](https://github.com/JackyZhang8/magicqueue-py/actions/workflows/ci.yml)
 
 轻量、可插拔的消息队列库 —— Go 版 [MagicQueue](https://github.com/JackyZhang8/MagicQueue) 的 Python 移植，API 与语义对齐。
 
@@ -90,6 +90,24 @@ q.enqueue(Payload("job", is_persist=True))
 
 启用后，`start_workers` 会先把尚未确认的消息重投回驱动再启动消费者。
 成功或永久失败（进入死信队列）后才会从持久层删除。
+
+### 持久层后端：sqlite（默认）或 LevelDB
+
+持久层通过 `Store` 抽象可插拔，内置两种实现，语义一致：
+
+| 方法 | 后端 | 依赖 | 与其他语言版本对齐 |
+|------|------|------|------|
+| `use_persistence(path)` | 标准库 `sqlite3` | 无额外依赖（默认） | — |
+| `use_leveldb(path)`     | LevelDB（`plyvel`） | `pip install "magicqueue[leveldb]"` | Go 版 LevelDB / Rust 版 sled |
+
+```python
+# 与 Go/Rust 版一致的 LevelDB 持久化
+q = MQueue("svc").use_memory().use_leveldb("./data/mq.leveldb")
+q.enqueue(Payload("job", is_persist=True))
+```
+
+> `plyvel` 在 Linux/macOS 提供预编译 wheel，通常无需系统级 `libleveldb`。
+> 也可实现自定义 `Store` 并用 `use_store(store)` 注入。
 
 ## Redis
 
