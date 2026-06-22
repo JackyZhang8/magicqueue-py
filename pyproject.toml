@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "magicqueue"
+version = "0.1.0"
+description = "Lightweight message queue with pluggable drivers (memory/Redis), persistence, priorities, retries and a dead-letter queue."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "JackyZhang8" }]
+keywords = ["queue", "redis", "worker", "jobs", "background"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: System :: Distributed Computing",
+]
+dependencies = []
+
+[project.optional-dependencies]
+redis = ["redis>=4.5,<6"]
+dev = ["pytest>=7.0", "ruff>=0.4", "redis>=4.5,<6"]
+
+[project.urls]
+Homepage = "https://github.com/JackyZhang8/MagicQueue"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
